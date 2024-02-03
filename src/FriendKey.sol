@@ -17,11 +17,11 @@ contract FriendKey is ERC1155, Ownable  {
     }
 
     function burn(address _from, uint _tokenId, uint _value) public onlyOwner {
-        _burn(_from, _tokenId, _value, bytes(""));
+        _burn(_from, _tokenId, _value);
     }
 
     function burnBatch(address _from, uint256[] memory _ids, uint256[] memory _values) public onlyOwner {
-        _burnBatch(_from, _ids, _values, bytes(""));
+        _burnBatch(_from, _ids, _values);
     }
 
 }
