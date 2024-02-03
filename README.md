@@ -1,31 +1,66 @@
-# Azurance Smart Contract
-Azurance is a decentralized insurance protocol, which offers high flexbility and openess for all participants.
+## Foundry
 
-## How to use
-1. Compile contracts
-`forge build`
-2. Test
-`forge test`
-3. Deploy (Check how to customize the script on that file).
-`./deploy.sh`
+**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
 
-## Deployments
+Foundry consists of:
 
-### Goerli
-- DAI: [0xB4638E2991b4aA81c5B25D10AAE58E0712853b3E](https://goerli.etherscan.io/address/0xB4638E2991b4aA81c5B25D10AAE58E0712853b3E)
-- WETH: [0x8F0f13b07EeAF4e307CBBEe6cB9Aea477937909C](https://goerli.etherscan.io/address/0x8F0f13b07EeAF4e307CBBEe6cB9Aea477937909C)
-- USDT: [0xAdcF3c517BD821EaC5576095766e5e363dd441e5](https://goerli.etherscan.io/address/0xAdcF3c517BD821EaC5576095766e5e363dd441e5)
+-   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
+-   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
+-   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
+-   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
 
-### Arbitrum Goerli
-- AzruanceFactory: [0x77d51D3B08aB7C1d5253513982a2FDb0A8550072](https://goerli.arbiscan.io/address/0x77d51d3b08ab7c1d5253513982a2fdb0a8550072)
-- SimpleAzurancePool: [0x4a954f76c828c35aF6E1225D9d3c773A735199d4](https://goerli.arbiscan.io/address/0x4a954f76c828c35aF6E1225D9d3c773A735199d4)
-- SimpleChecker: [0x927B303A496b273f3E90Ce01c54C9f9b7F5A76C2](https://goerli.arbiscan.io/address/0x927B303A496b273f3E90Ce01c54C9f9b7F5A76C2)
-- DAI: [0x3FC3378D11b7a9187bd20053FbDf6F4D900235f6](https://goerli.arbiscan.io/address/0x3FC3378D11b7a9187bd20053FbDf6F4D900235f6)
-- WETH: [0x40b600C5e104E52bD2ea9EA453bFDFEe7811Ce0B](https://goerli.arbiscan.io/address/0x40b600C5e104E52bD2ea9EA453bFDFEe7811Ce0B.)
-- USDT: [0xaB38CD656D1C6aF07A879Dbf079C5f287883975f](https://goerli.arbiscan.io/address/0xaB38CD656D1C6aF07A879Dbf079C5f287883975f)
+## Documentation
 
-### Fuji
-- AzruanceFactory: [0x2DA1A7AaB838960a49AC0D62480aD3412b2E8B5B](https://testnet.snowtrace.io/address/0x2DA1A7AaB838960a49AC0D62480aD3412b2E8B5B)
-- DAI: [0xEa5363305017B2A6fD0d72Ba830513c678a2f1fE](https://testnet.snowtrace.io/address/0xEa5363305017B2A6fD0d72Ba830513c678a2f1fE)
-- WETH: [0x68cF7D5CEC3f8Cd69d7Bd842e1665818E46E2126](https://testnet.snowtrace.io/address/0x68cF7D5CEC3f8Cd69d7Bd842e1665818E46E2126)
-- USDT: [0x38430d2703246F986685F68E2817CB370F5f3CCD](https://testnet.snowtrace.io/address/0x38430d2703246F986685F68E2817CB370F5f3CCD)
+https://book.getfoundry.sh/
+
+## Usage
+
+### Build
+
+```shell
+$ forge build
+```
+
+### Test
+
+```shell
+$ forge test
+```
+
+### Format
+
+```shell
+$ forge fmt
+```
+
+### Gas Snapshots
+
+```shell
+$ forge snapshot
+```
+
+### Anvil
+
+```shell
+$ anvil
+```
+
+### Deploy
+
+```shell
+$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+```
+
+### Cast
+
+```shell
+$ cast <subcommand>
+```
+
+### Help
+
+```shell
+$ forge --help
+$ anvil --help
+$ cast --help
+```
