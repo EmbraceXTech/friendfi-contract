@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.20;
+pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "./interfaces/IFriendKey.sol";
 
-contract FriendKey is ERC1155, Ownable  {
+contract FriendKey is ERC1155, Ownable, IFriendKey  {
 
     constructor(string memory uri_) ERC1155(uri_) Ownable(msg.sender) {}
 

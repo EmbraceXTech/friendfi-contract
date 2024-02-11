@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.20;
+pragma solidity ^0.8.19;
 
-import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/ConfirmedOwner.sol";
 import {FunctionsClient} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/FunctionsClient.sol";
+import {ConfirmedOwner} from "@chainlink/contracts/src/v0.8/shared/access/ConfirmedOwner.sol";
 import {FunctionsRequest} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsRequest.sol";
 
 contract FriendKeyManagerFunctions is FunctionsClient, ConfirmedOwner {
@@ -12,8 +12,9 @@ contract FriendKeyManagerFunctions is FunctionsClient, ConfirmedOwner {
     bytes public s_lastResponse;
     bytes public s_lastError;
 
+    // router - Hardcoded for Fuji
     // Check to get the router address for your supported network https://docs.chain.link/chainlink-functions/supported-networks
-    address router = 0xA9d587a00A31A52Ed70D6026794a8FC5E2F5dCb0;
+    // address router = 0xA9d587a00A31A52Ed70D6026794a8FC5E2F5dCb0;
 
     // donID - Hardcoded for Fuji
     // Check to get the donID for your supported network https://docs.chain.link/chainlink-functions/supported-networks
@@ -24,33 +25,39 @@ contract FriendKeyManagerFunctions is FunctionsClient, ConfirmedOwner {
     mapping(bytes32 => string) public pendingUUID;
 
     // User database
-    mapping(address => string) internal _addressUUIDs;
-    mapping(string => address) internal _uuidAddresses;
+    mapping(address => uint) internal _addressIds;
+    mapping(string => uint) internal _uuidIds;
     string[] internal _uuids;
     address[] internal _addresses;
+    uint[] internal _prices;
+
+    // Storage
+    uint256 public minFee = 0.0005 ether;
 
     string source =
         "const UUID = args[0];"
         "const token = args[1];"
-        "const authToken = "
-        "`NDQ2OTdmZDItYjc4Zi00ZjEwLWE3YTktNzc4M2U3NzBkZDlhOnNQeThWUU1ZeU5"
+        "const authToken = `NDQ2OTdmZDItYjc4Zi00ZjEwLWE3YTktNzc4M2U3NzBkZDlhOnNQeThWUU1ZeU5rUDdYejdhSUh0RnJwRnZkcm40WldrR1Z0eDN0enU=`;"
         "const apiResponse = await Functions.makeHttpRequest({"
         "url: `https://api.particle.network/server/rpc/#getUserInfo`,"
         "method: `POST`,"
         "headers: {"
-        "`accept`: `application/json`,"
-        "`content-type`: `application/json`,"
-        "`Authorization`: `Basic ${authToken}`"
-        "  },"
-        "    data: {jsonrpc: `2.0`, id: 1, method: `getUserInfo`,"
-        "params: [UUID, token]}"
-        "})"
+        "    'accept': `application/json`,"
+        "    'content-type': `application/json`,"
+        "    'Authorization': `Basic ${authToken}`"
+        "},"
+        "data: {"
+        "    jsonrpc: `2.0`, id: 1, method: `getUserInfo`,"
+        "    params: [UUID, token]"
+        "}"
+        "});"
         "if (apiResponse.error) {"
-        "console.error(apiResponse)"
-        "throw Error(`Request failed`)"
+        "console.error(apiResponse);"
+        "throw Error(`Request failed`);"
         "}"
         "const { data } = apiResponse;"
-        "return Functions.encodeString(data.result.wallets[0].publicAddress)";
+        "const evmIndex = data.result.wallets.findIndex(item => item.chain === 'evm_chain');"
+        "return Functions.encodeUint256(BigInt(data.result.wallets[evmIndex].publicAddress));";
 
     error UnexpectedRequestID(bytes32 requestId);
 
@@ -61,7 +68,7 @@ contract FriendKeyManagerFunctions is FunctionsClient, ConfirmedOwner {
         bytes err
     );
 
-    constructor(uint64 subscriptionId_) FunctionsClient(router) ConfirmedOwner(msg.sender) {
+    constructor(uint64 subscriptionId_, address router_) FunctionsClient(router_) ConfirmedOwner(msg.sender) {
         subscriptionId = subscriptionId_;
     }
 
@@ -97,22 +104,23 @@ contract FriendKeyManagerFunctions is FunctionsClient, ConfirmedOwner {
         s_lastError = err;
 
         string memory uuid = pendingUUID[requestId];
-        address addr = bytesToAddress(response);
+        uint256 addrUint256 = uint256(bytes32(s_lastResponse));
+        address addr = uint256ToAddress(addrUint256);
+
+        uint userId = _addresses.length + 1;
+        _addressIds[addr] = userId;
+        _uuidIds[uuid] = userId;
 
         _uuids.push(uuid);
         _addresses.push(addr);
-
-        _uuidAddresses[uuid] = addr;
-        _addressUUIDs[addr] = uuid;
+        _prices.push(minFee);
 
         // Emit an event to log the response
-        emit Response(requestId, target, s_lastResponse, s_lastError);
+        emit Response(requestId, uuid, s_lastResponse, s_lastError);
     }
 
-    function bytesToAddress(bytes bys) private pure returns (address addr) {
-        assembly {
-            addr := mload(add(bys,20))
-        } 
+    function uint256ToAddress(uint256 _input) public pure returns (address) {
+        return address(bytes20(uint160(_input)));
     }
     
 }
