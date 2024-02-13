@@ -27,6 +27,7 @@ contract FriendKeyManagerFunctions is FunctionsClient, ConfirmedOwner {
     // User database
     mapping(address => uint) internal _addressIds;
     mapping(string => uint) internal _uuidIds;
+    mapping(string => bool) internal _registered;
     string[] internal _uuids;
     address[] internal _addresses;
     uint[] internal _prices;
@@ -104,19 +105,24 @@ contract FriendKeyManagerFunctions is FunctionsClient, ConfirmedOwner {
         s_lastError = err;
 
         string memory uuid = pendingUUID[requestId];
-        uint256 addrUint256 = uint256(bytes32(s_lastResponse));
+        uint256 addrUint256 = bytesToUint256(s_lastResponse);
         address addr = uint256ToAddress(addrUint256);
 
-        uint userId = _addresses.length + 1;
+        uint userId = _addresses.length;
         _addressIds[addr] = userId;
         _uuidIds[uuid] = userId;
 
         _uuids.push(uuid);
         _addresses.push(addr);
         _prices.push(minFee);
+        _registered[uuid] = true;
 
         // Emit an event to log the response
         emit Response(requestId, uuid, s_lastResponse, s_lastError);
+    }
+
+    function bytesToUint256(bytes memory _input) public pure returns (uint256) {
+        return uint256(bytes32(_input));
     }
 
     function uint256ToAddress(uint256 _input) public pure returns (address) {

@@ -4,26 +4,64 @@ pragma solidity ^0.8.19;
 import "forge-std/Test.sol";
 import "../src/FriendKeyManager.sol";
 import "./contracts/TestFunctionsRouter.sol";
+import "./contracts/TestVRFCoordinator.sol";
 
 import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
 import {FunctionsResponse} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsResponse.sol";
 
-contract FriendKeyManagerTest is Test, IERC1155Receiver {
+contract FriendKeyManagerTest is Test {
 
     FriendKeyManager public manager;
     TestFunctionsRouter public functionRouter;
+    TestVRFCoordinator public vrfCoordinator;
 
     function setUp() public {
         uint64 subscriptionId = 4070;
         functionRouter = new TestFunctionsRouter();
+        vrfCoordinator = new TestVRFCoordinator();
 
         string[] memory uris = new string[](3);
         uris[0] = "uri0";
         uris[1] = "uri1";
         uris[2] = "uri2";
 
-        manager = new FriendKeyManager(subscriptionId, address(functionRouter), uris);
+        manager = new FriendKeyManager(subscriptionId, address(functionRouter), address(vrfCoordinator), uris);
+    }
+
+    function testRegister() public {
+        string memory _uuid = "f482a971-6d3e-4124-abf9-7a27d2834d97";
+        fixtureRegister(_uuid, msg.sender);
+        assertEq(manager.isRegistered(_uuid), true);
+        assertEq(manager.addressUUIDs(msg.sender), _uuid);
+        assertEq(manager.uuidAddresses(_uuid), msg.sender);
+    }
+
+    function testMint() public {
+        fixtureRegisterMin();
+        uint256 id = fixtureMint(msg.sender, 1, 1);
+        uint256 balance = IERC1155(manager.keys(0)).balanceOf(msg.sender, id);
+        assertEq(balance, 1);
+    }
+
+    function testBatchMint() public {
+        fixtureRegisterMin();
+
+        uint256 amount = 5;
+        (uint256[] memory ids, uint256[] memory values) = fixtureBatchMint(msg.sender, amount, 1);
+
+        uint256 sum = 0;
+        for (uint256 i = 0; i < values.length; i++) {
+            uint balance = IERC1155(manager.keys(0)).balanceOf(msg.sender, ids[i]);
+            assertGt(balance, 0);
+            sum += values[i];
+        }
+
+        assertEq(sum, amount);
+    }
+
+    function testMintDigest() public {
+        
     }
 
     function fixtureRegister(string memory _uuid, address addr) public {
@@ -61,69 +99,60 @@ contract FriendKeyManagerTest is Test, IERC1155Receiver {
         }
     }
 
-    function testRegister() public {
-        string memory _uuid = "f482a971-6d3e-4124-abf9-7a27d2834d97";
-        fixtureRegister(_uuid, msg.sender);
-        assertEq(manager.isRegistered(_uuid), true);
-        assertEq(manager.addressUUIDs(msg.sender), _uuid);
-        assertEq(manager.uuidAddresses(_uuid), msg.sender);
-    }
-
-    function testMint() public {
-        fixtureRegisterMin();
+    function fixtureMint(address to, uint256 amount, uint256 seed) public returns (uint) {
         uint256 fee = manager.minFee();
-        uint256 id = manager.mint{value: fee}();
-        uint256 balance = IERC1155(manager.keys(0)).balanceOf(msg.sender, id);
-        assertEq(balance, 1);
+        manager.mint{value: fee}(to);
+        uint256 requestId = vrfCoordinator.lastRequestId();
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0] = seed;
+        uint256 id = getWeightedRandomIndex(seed, 0);
+        vrfCoordinator.fullfilRandomWord(address(manager), requestId, randomWords);
+        return id;
     }
 
-    //  function testSellInsurance() public {
-    //     uint _amount = 100 * 10 ** testERC20.decimals();
+    function fixtureBatchMint(address to, uint256 amount, uint256 seed) public returns (uint256[] memory, uint256[] memory) {
+        uint256 fee = manager.minFee();
+        manager.batchMint{value: fee * amount}(msg.sender, amount);
+        uint256 requestId = vrfCoordinator.lastRequestId();
+        uint256[] memory randomWords = new uint256[](1);
+        randomWords[0] = seed;
 
-    //     testERC20.approve(address(azurancePool), _amount);
-    //     azurancePool.sellInsurance(_amount);
+        uint256[] memory ids = new uint256[](amount);
+        uint256[] memory values = new uint256[](amount);
 
-    //     assertEq(azurancePool.totalValueLocked(), _amount);
-    //     assertEq(IERC20(azurancePool.sellerToken()).balanceOf(address(this)), _amount);
-    // }
+        for (uint256 i = 0; i < amount; i++) {
+            ids[i] = getWeightedRandomIndex(seed, i);
+            values[i] = 1;
+        }
 
-    //  function testFail_BuyInsuranceExceedMax() public {
-    //     uint _amount = 100 * 10 ** testERC20.decimals();
-    //     vm.startPrank(address(1));
-    //     testERC20.approve(address(azurancePool), _amount * 2);
-    //     azurancePool.sellInsurance(_amount * 2);
-
-    //     vm.stopPrank();
-    //     testERC20.approve(address(azurancePool), _amount);
-    //     azurancePool.buyInsurance(_amount);
-
-    //     testERC20.approve(address(azurancePool), _amount);
-    //     azurancePool.buyInsurance(_amount + 1);
-    // }
-
-    function onERC1155Received(
-        address operator,
-        address from,
-        uint256 id,
-        uint256 value,
-        bytes calldata data
-    ) external override returns (bytes4) {
-        return this.onERC1155Received.selector;
+        vrfCoordinator.fullfilRandomWord(address(manager), requestId, randomWords);
+        return (ids, values);
     }
 
-    function onERC1155BatchReceived(
-        address operator,
-        address from,
-        uint256[] calldata ids,
-        uint256[] calldata values,
-        bytes calldata data
-    ) external override returns (bytes4) {
-        return this.onERC1155BatchReceived.selector;
-    }
+    function getWeightedRandomIndex(uint256 _seed, uint256 _index) public view returns (uint) {
+        uint256 randomNumber = uint256(keccak256(abi.encodePacked(_seed, _index, block.timestamp, block.prevrandao, address(vrfCoordinator))));
+        uint len = manager.numUsers();
+        uint startIndex = randomNumber % len;
 
-    function supportsInterface(bytes4 interfaceId) external view returns (bool) {
-        return interfaceId == type(IERC1155Receiver).interfaceId;
-    }
+        uint end = (startIndex + manager.RANDOM_WINDOW());
+        uint endIndex = end < len ? end : len;
 
+        uint totalWeight = 0;
+        for (uint i = startIndex; i < endIndex; i++) {
+            totalWeight += manager.prices(i);
+        }
+
+        randomNumber = uint256(keccak256(abi.encodePacked(randomNumber + 1))) % totalWeight;
+        uint256 cumulativeWeight = 0;
+        for (uint256 i = startIndex; i < endIndex; i++) {
+            cumulativeWeight += manager.prices(i);
+            if (randomNumber < cumulativeWeight) {
+                return i;
+            }
+        }
+
+        // Should never reach here, but return 0 in case of unforeseen circumstances
+        return 0;
+    }
 
 }

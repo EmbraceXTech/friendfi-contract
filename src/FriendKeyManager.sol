@@ -4,8 +4,9 @@ pragma solidity ^0.8.19;
 import "./interfaces/IFriendKey.sol";
 import "./FriendKey.sol";
 import "./FriendKeyManagerFunctions.sol";
+import "./FriendKeyManagerVRF.sol";
 
-contract FriendKeyManager is FriendKeyManagerFunctions {
+contract FriendKeyManager is FriendKeyManagerFunctions, FriendKeyManagerVRF {
     using FunctionsRequest for FunctionsRequest.Request;
 
     IFriendKey[3] public keys;
@@ -28,8 +29,9 @@ contract FriendKeyManager is FriendKeyManagerFunctions {
     constructor(
         uint64 subscriptionId_,
         address router_,
+        address coordinator_,
         string[] memory uris
-    ) FriendKeyManagerFunctions(subscriptionId_, router_) {
+    ) FriendKeyManagerFunctions(subscriptionId_, router_) FriendKeyManagerVRF(subscriptionId_, coordinator_) {
         require(uris.length == 3, "Size mismatch");
 
         for (uint i = 0; i < 3; i++) {
@@ -49,47 +51,49 @@ contract FriendKeyManager is FriendKeyManagerFunctions {
         _validateParticleAuth(_uuid, _token);
     }
 
-    function mint() public payable returns (uint) {
+    function mint(address _to) public payable {
         require(numUsers() > MIN_USERS, "User amount is too low");
 
         uint fee = getMintFee(1);
         require(msg.value >= fee, "Insufficient fee");
 
-        (uint256[] memory ids, ) = _mint(msg.sender, 1);
+        _requestMint(_to, 1);
 
         // payment return 
         uint cashReturn = msg.value - fee;
         if (cashReturn > 0) {
             payable(msg.sender).transfer(cashReturn);
         }
-
-        return ids[0];
     }
 
-    function batchMint(uint _mintAmount) public payable returns (uint256[] memory) {
+    function batchMint(address _to, uint _mintAmount) public payable {
         require(numUsers() > MIN_USERS, "User amount is too low");
 
         uint fee = getMintFee(_mintAmount);
         require(msg.value >= fee, "Insufficient fee");
 
-       (uint256[] memory ids, ) = _mint(msg.sender, _mintAmount);
+        _requestMint(_to, _mintAmount);
 
         // payment return 
         uint cashReturn = msg.value - fee;
         if (cashReturn > 0) {
             payable(msg.sender).transfer(cashReturn);
         }
-        return ids;
     }
 
-    function mintDigest(uint _level, uint[] memory _ids) public {
-        require(_ids.length % DIGEST_BATCH == 0, "Batch size mismatch");
+    function mintDigest(uint _level, uint[] memory _ids, uint[] memory _values, address _to) public returns (uint256[] memory, uint256[] memory) {
+        uint _total = 0;
+        for (uint i = 0; i < _values.length; i++) {
+            _total += _values[i];
+        }
+        require(_ids.length == _values.length, "Input array len mismatch");
+        require(_total % DIGEST_BATCH == 0, "Batch size mismatch");
         for (uint i = 0; i < _ids.length; i++) {
-            keys[_level].burn(msg.sender, _ids[i], MERGE_PIECES);
+            keys[_level].burn(msg.sender, _ids[i], _values[i]);
         }
 
-        uint _mintAmount = DIGEST_RETURNS[_level] * _ids.length / DIGEST_BATCH;
-        _mint(msg.sender, _mintAmount);
+        uint _mintAmount = DIGEST_RETURNS[_level] * _total / DIGEST_BATCH;
+        _requestMint(_to, _mintAmount);
     }
 
     function merge(uint _id, uint _level) public payable {
@@ -105,9 +109,35 @@ contract FriendKeyManager is FriendKeyManagerFunctions {
         payable(addresses(_id)).transfer(userFee);
     }
 
-    function _getWeightedRandomIndex() internal view returns (uint) {
-        // TODO: user VRF instead
-        uint256 randomNumber = uint256(keccak256(abi.encodePacked(block.timestamp, block.prevrandao, msg.sender)));
+    function fulfillRandomWords(
+        uint256 _requestId,
+        uint256[] memory _randomWords
+    ) internal override {
+        require(mintRequests[_requestId].exists, "request not found");
+        mintRequests[_requestId].fulfilled = true;
+
+        address _to = mintRequests[_requestId].to;
+        uint256 _amount = mintRequests[_requestId].amount;
+        uint256 _seed = _randomWords[0];
+
+        _mint(_to, _amount, _seed);
+    }
+
+    function _mint(address _to, uint _mintAmount, uint _seed) internal returns(uint[] memory, uint[] memory) {
+        uint[] memory tokenIds = new uint[](_mintAmount);
+        uint[] memory values = new uint[](_mintAmount);
+        for (uint i = 0; i < _mintAmount; i++) {
+            tokenIds[i] = _getWeightedRandomIndex(_seed, i);
+            values[i] = 1;
+        }
+
+        keys[0].mintBatch(_to, tokenIds, values);
+        return (tokenIds, values);
+    }
+
+    function _getWeightedRandomIndex(uint256 _seed, uint256 _index) internal view returns (uint) {
+        uint256 randomNumber = uint256(keccak256(abi.encodePacked(_seed, _index, block.timestamp, block.prevrandao, msg.sender)));
+
         uint len = numUsers();
         uint startIndex = randomNumber % len;
 
@@ -119,7 +149,6 @@ contract FriendKeyManager is FriendKeyManagerFunctions {
             totalWeight += prices(i);
         }
 
-        // TODO: user VRF instead
         randomNumber = uint256(keccak256(abi.encodePacked(randomNumber + 1))) % totalWeight;
         uint256 cumulativeWeight = 0;
         for (uint256 i = startIndex; i < endIndex; i++) {
@@ -131,6 +160,10 @@ contract FriendKeyManager is FriendKeyManagerFunctions {
 
         // Should never reach here, but return 0 in case of unforeseen circumstances
         return 0;
+    }
+
+    function claimFee(uint _value) public {
+        payable(owner()).transfer(_value);
     }
 
     function getMintFee(uint number) public view returns (uint) {
@@ -145,24 +178,8 @@ contract FriendKeyManager is FriendKeyManagerFunctions {
         return adjustedMintFee * number;
     }
 
-    function _mint(address _to, uint _mintAmount) internal returns(uint[] memory, uint[] memory) {
-        uint[] memory tokenIds = new uint[](_mintAmount);
-        uint[] memory values = new uint[](_mintAmount);
-        for (uint i = 0; i < _mintAmount; i++) {
-            tokenIds[i] = _getWeightedRandomIndex();
-            values[i] = 1;
-        }
-
-        keys[0].mintBatch(_to, tokenIds, values);
-        return (tokenIds, values);
-    }
-
-    function claimFee(uint _value) public {
-        payable(owner()).transfer(_value);
-    }
-
     function isRegistered(string memory _uuid) public view returns(bool) {
-        return _uuidIds[_uuid] > 0;
+        return _registered[_uuid];
     }
 
     function addressUUIDs(address _addr) public view returns(string memory) {
@@ -186,15 +203,15 @@ contract FriendKeyManager is FriendKeyManagerFunctions {
     }
 
     function addresses(uint256 _index) public view returns(address) {
-        return _addresses[_index - 1];
+        return _addresses[_index];
     }
 
     function uuids(uint256 _index) public view returns(string memory) {
-        return _uuids[_index - 1];
+        return _uuids[_index];
     }
 
     function prices(uint256 _index) public view returns(uint256) {
-        return _prices[_index - 1];
+        return _prices[_index];
     }
 
     function numUsers() public view returns (uint256) {
