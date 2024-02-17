@@ -10,7 +10,7 @@ contract DeployFriendKeyManager is Script {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);
 
-        address userManager = 0x2eD832Ba664535e5886b75D64C46EB9a228C2610;
+        address userManager = 0x36BdBF70B474D6A2aF3F17531Cfe1a9Ea1036c03;
         uint64 vrfSubscriptionId = 1408;
         address vrfCoordinator = 0x2eD832Ba664535e5886b75D64C46EB9a228C2610;
 
