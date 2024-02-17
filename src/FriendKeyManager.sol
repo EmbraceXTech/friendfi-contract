@@ -52,7 +52,7 @@ contract FriendKeyManager is FriendKeyManagerFunctions, FriendKeyManagerVRF {
     }
 
     function mint(address _to) public payable {
-        require(numUsers() > MIN_USERS, "User amount is too low");
+        require(numUsers() >= MIN_USERS, "User amount is too low");
 
         uint fee = getMintFee(1);
         require(msg.value >= fee, "Insufficient fee");
@@ -67,7 +67,7 @@ contract FriendKeyManager is FriendKeyManagerFunctions, FriendKeyManagerVRF {
     }
 
     function batchMint(address _to, uint _mintAmount) public payable {
-        require(numUsers() > MIN_USERS, "User amount is too low");
+        require(numUsers() >= MIN_USERS, "User amount is too low");
 
         uint fee = getMintFee(_mintAmount);
         require(msg.value >= fee, "Insufficient fee");
