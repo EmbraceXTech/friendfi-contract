@@ -3,8 +3,9 @@ pragma solidity ^0.8.19;
 
 import "@chainlink/contracts/src/v0.8/vrf/interfaces/VRFCoordinatorV2Interface.sol";
 import "@chainlink/contracts/src/v0.8/vrf/VRFConsumerBaseV2.sol";
+import "@chainlink/contracts/src/v0.8/shared/access/ConfirmedOwner.sol";
 
-abstract contract FriendKeyManagerVRF is VRFConsumerBaseV2 {
+abstract contract FriendKeyManagerVRF is VRFConsumerBaseV2, ConfirmedOwner {
     event RequestSent(uint256 requestId, uint32 numWords);
     event RequestFulfilled(uint256 requestId, uint256[] randomWords);
 
@@ -37,7 +38,7 @@ abstract contract FriendKeyManagerVRF is VRFConsumerBaseV2 {
     // this limit based on the network that you select, the size of the request,
     // and the processing of the callback request in the fulfillRandomWords()
     // function.
-    uint32 callbackGasLimit = 1000000;
+    uint32 callbackGasLimit = 2500000;
 
     // The default is 3, but you can set this higher.
     uint16 requestConfirmations = 3;
@@ -49,7 +50,7 @@ abstract contract FriendKeyManagerVRF is VRFConsumerBaseV2 {
     // Hardcoded coordinator
     // address coordinator = 0x8103B0A8A00be2DDC778e6e7eaa21791Cd364625;
 
-    constructor(uint64 subscriptionId, address coordinator) VRFConsumerBaseV2(coordinator) {
+    constructor(uint64 subscriptionId, address coordinator) VRFConsumerBaseV2(coordinator) ConfirmedOwner(msg.sender) {
         COORDINATOR = VRFCoordinatorV2Interface(coordinator);
         s_subscriptionId = subscriptionId;
     }
