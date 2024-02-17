@@ -3,6 +3,7 @@ pragma solidity ^0.8.19;
 
 import "forge-std/Test.sol";
 import "../src/FriendKeyManager.sol";
+import "../src/UserManager.sol";
 import "./contracts/TestFunctionsRouter.sol";
 import "./contracts/TestVRFCoordinator.sol";
 
@@ -13,6 +14,8 @@ import {FunctionsResponse} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/
 contract FriendKeyManagerTest is Test, IERC1155Receiver {
 
     FriendKeyManager public manager;
+    UserManager public userManager;
+
     TestFunctionsRouter public functionRouter;
     TestVRFCoordinator public vrfCoordinator;
 
@@ -21,8 +24,10 @@ contract FriendKeyManagerTest is Test, IERC1155Receiver {
 
     function setUp() public {
         uint64 functionSubscriptionId = 4070;
-        uint64 vrfSubscriptionId = 4070;
         functionRouter = new TestFunctionsRouter();
+        userManager = new UserManager(functionSubscriptionId, address(functionRouter));
+
+        uint64 vrfSubscriptionId = 4070;
         vrfCoordinator = new TestVRFCoordinator();
 
         string[] memory uris = new string[](3);
@@ -30,15 +35,15 @@ contract FriendKeyManagerTest is Test, IERC1155Receiver {
         uris[1] = "uri1";
         uris[2] = "uri2";
 
-        manager = new FriendKeyManager(functionSubscriptionId, address(functionRouter), vrfSubscriptionId, address(vrfCoordinator), uris);
+        manager = new FriendKeyManager(address(userManager), vrfSubscriptionId, address(vrfCoordinator), uris);
     }
 
     function testRegister() public {
         string memory _uuid = "f482a971-6d3e-4124-abf9-7a27d2834d97";
         fixtureRegister(_uuid, address(this));
-        assertEq(manager.isRegistered(_uuid), true);
-        assertEq(manager.addressUUIDs(address(this)), _uuid);
-        assertEq(manager.uuidAddresses(_uuid), address(this));
+        assertEq(userManager.isRegistered(_uuid), true);
+        assertEq(userManager.addressUUIDs(address(this)), _uuid);
+        assertEq(userManager.uuidAddresses(_uuid), address(this));
     }
 
     function testMint() public {
@@ -117,17 +122,17 @@ contract FriendKeyManagerTest is Test, IERC1155Receiver {
 
     function fixtureRegister(string memory _uuid, address addr) public {
         string memory _token = "4ce8c2fd-0f32-42df-a7ce-6d19f5507a28";
-        manager.register(_uuid, _token);
+        userManager.register(_uuid, _token);
         bytes memory response = abi.encode(uint256(uint160(bytes20(addr)))); 
         bytes memory err = bytes(""); 
         uint96 juelsPerGas = 0;
         uint96 costWithoutFulfillment = 0;
         address transmitter = address(this);
         FunctionsResponse.Commitment memory commitment = FunctionsResponse.Commitment({
-            requestId: manager.s_lastRequestId(),
+            requestId: userManager.s_lastRequestId(),
             coordinator: address(0),
             estimatedTotalCostJuels: 0,
-            client: address(manager),
+            client: address(userManager),
             subscriptionId: 4070,
             callbackGasLimit: 0,
             adminFee: 0,
@@ -217,7 +222,7 @@ contract FriendKeyManagerTest is Test, IERC1155Receiver {
 
     function getWeightedRandomIndex(uint256 _seed, uint256 _index) public view returns (uint) {
         uint256 randomNumber = uint256(keccak256(abi.encodePacked(_seed, _index, block.timestamp, block.prevrandao, address(vrfCoordinator))));
-        uint len = manager.numUsers();
+        uint len = userManager.numUsers();
         uint startIndex = randomNumber % len;
 
         uint end = (startIndex + manager.RANDOM_WINDOW());
@@ -225,13 +230,13 @@ contract FriendKeyManagerTest is Test, IERC1155Receiver {
 
         uint totalWeight = 0;
         for (uint i = startIndex; i < endIndex; i++) {
-            totalWeight += manager.prices(i);
+            totalWeight += manager.getPrice(i);
         }
 
         randomNumber = uint256(keccak256(abi.encodePacked(randomNumber + 1))) % totalWeight;
         uint256 cumulativeWeight = 0;
         for (uint256 i = startIndex; i < endIndex; i++) {
-            cumulativeWeight += manager.prices(i);
+            cumulativeWeight += manager.getPrice(i);
             if (randomNumber < cumulativeWeight) {
                 return i;
             }

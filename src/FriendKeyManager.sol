@@ -2,13 +2,12 @@
 pragma solidity ^0.8.19;
 
 import "./interfaces/IFriendKey.sol";
+import "./interfaces/IUserManager.sol";
 import "./FriendKey.sol";
-import "./FriendKeyManagerFunctions.sol";
 import "./FriendKeyManagerVRF.sol";
 
-contract FriendKeyManager is FriendKeyManagerFunctions, FriendKeyManagerVRF {
-    using FunctionsRequest for FunctionsRequest.Request;
-
+contract FriendKeyManager is FriendKeyManagerVRF {
+    IUserManager public userManager;
     IFriendKey[3] public keys;
 
     uint256 immutable public RANDOM_WINDOW = 1000;
@@ -25,14 +24,18 @@ contract FriendKeyManager is FriendKeyManagerFunctions, FriendKeyManagerVRF {
     uint256 public cooldownDuration = 1 days;
     uint256 public feeChangeRate = 2;
 
+    uint256 public minFee = 0.0005 ether;
+    uint256 public maxFee = 0.005 ether;
+
     constructor(
-        uint64 functionSubscriptionId_,
-        address router_,
+        address userManager_,
         uint64 vrfSubscriptionId_,
         address coordinator_,
         string[] memory uris
-    ) FriendKeyManagerFunctions(functionSubscriptionId_, router_) FriendKeyManagerVRF(vrfSubscriptionId_, coordinator_) {
+    ) FriendKeyManagerVRF(vrfSubscriptionId_, coordinator_) {
         require(uris.length == 3, "Size mismatch");
+
+        userManager = IUserManager(userManager_);
 
         for (uint i = 0; i < 3; i++) {
             keys[i] = new FriendKey(uris[i]);
@@ -45,14 +48,9 @@ contract FriendKeyManager is FriendKeyManagerFunctions, FriendKeyManagerVRF {
         DIGEST_RETURNS[1] = 4;
         DIGEST_RETURNS[2] = 10;
     }
-    
-    function register(string memory _uuid, string memory _token) public {
-        require(!isRegistered(_uuid), "Already registered");
-        _validateParticleAuth(_uuid, _token);
-    }
 
     function mint(address _to) public payable {
-        require(numUsers() >= MIN_USERS, "User amount is too low");
+        require(userManager.numUsers() >= MIN_USERS, "User amount is too low");
 
         uint fee = getMintFee(1);
         require(msg.value >= fee, "Insufficient fee");
@@ -67,7 +65,7 @@ contract FriendKeyManager is FriendKeyManagerFunctions, FriendKeyManagerVRF {
     }
 
     function batchMint(address _to, uint _mintAmount) public payable {
-        require(numUsers() >= MIN_USERS, "User amount is too low");
+        require(userManager.numUsers() >= MIN_USERS, "User amount is too low");
 
         uint fee = getMintFee(_mintAmount);
         require(msg.value >= fee, "Insufficient fee");
@@ -106,7 +104,7 @@ contract FriendKeyManager is FriendKeyManagerFunctions, FriendKeyManagerVRF {
         keys[_level + 1].mint(msg.sender, _id, 1);
 
         uint userFee = fee * USER_DIVIDEN / 10e4;
-        payable(addresses(_id)).transfer(userFee);
+        payable(userManager.addresses(_id)).transfer(userFee);
     }
 
     function fulfillRandomWords(
@@ -138,7 +136,7 @@ contract FriendKeyManager is FriendKeyManagerFunctions, FriendKeyManagerVRF {
     function _getWeightedRandomIndex(uint256 _seed, uint256 _index) internal view returns (uint) {
         uint256 randomNumber = uint256(keccak256(abi.encodePacked(_seed, _index, block.timestamp, block.prevrandao, msg.sender)));
 
-        uint len = numUsers();
+        uint len = userManager.numUsers();
         uint startIndex = randomNumber % len;
 
         uint end = (startIndex + RANDOM_WINDOW);
@@ -146,13 +144,13 @@ contract FriendKeyManager is FriendKeyManagerFunctions, FriendKeyManagerVRF {
 
         uint totalWeight = 0;
         for (uint i = startIndex; i < endIndex; i++) {
-            totalWeight += prices(i);
+            totalWeight += getPrice(i);
         }
 
         randomNumber = uint256(keccak256(abi.encodePacked(randomNumber + 1))) % totalWeight;
         uint256 cumulativeWeight = 0;
         for (uint256 i = startIndex; i < endIndex; i++) {
-            cumulativeWeight += prices(i);
+            cumulativeWeight += getPrice(i);
             if (randomNumber < cumulativeWeight) {
                 return i;
             }
@@ -178,48 +176,9 @@ contract FriendKeyManager is FriendKeyManagerFunctions, FriendKeyManagerVRF {
         return adjustedMintFee * number;
     }
 
-    function isRegistered(string memory _uuid) public view returns(bool) {
-        return _registered[_uuid];
-    }
-
-    function addressId(address _addr) public view returns(uint) {
-        return _addressIds[_addr];
-    }
-
-    function addressUUIDs(address _addr) public view returns(string memory) {
-        uint id = _addressIds[_addr];
-        return uuids(id);
-    }
-
-    function uuidAddresses(string memory _uuid) public view returns(address) {
-        uint id = _uuidIds[_uuid];
-        return addresses(id);
-    }
-
-    function addressPrice(address _addr) public view returns(uint) {
-        uint id = _addressIds[_addr];
-        return prices(id);
-    }
-
-    function uuidPrice(string memory _uuid) public view returns(uint) {
-        uint id = _uuidIds[_uuid];
-        return prices(id);
-    }
-
-    function addresses(uint256 _index) public view returns(address) {
-        return _addresses[_index];
-    }
-
-    function uuids(uint256 _index) public view returns(string memory) {
-        return _uuids[_index];
-    }
-
-    function prices(uint256 _index) public view returns(uint256) {
-        return _prices[_index];
-    }
-
-    function numUsers() public view returns (uint256) {
-        return _addresses.length;
+    function getPrice(uint id) public view returns (uint) {
+        // TODO: change to dynamic pricing in the future
+        return 0.0005 ether;
     }
 
 }
