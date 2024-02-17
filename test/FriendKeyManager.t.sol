@@ -10,11 +10,14 @@ import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155Receiver.sol";
 import {FunctionsResponse} from "@chainlink/contracts/src/v0.8/functions/v1_0_0/libraries/FunctionsResponse.sol";
 
-contract FriendKeyManagerTest is Test {
+contract FriendKeyManagerTest is Test, IERC1155Receiver {
 
     FriendKeyManager public manager;
     TestFunctionsRouter public functionRouter;
     TestVRFCoordinator public vrfCoordinator;
+
+    // Test variable
+    mapping(uint256 => uint256) sums;
 
     function setUp() public {
         uint64 subscriptionId = 4070;
@@ -31,16 +34,16 @@ contract FriendKeyManagerTest is Test {
 
     function testRegister() public {
         string memory _uuid = "f482a971-6d3e-4124-abf9-7a27d2834d97";
-        fixtureRegister(_uuid, msg.sender);
+        fixtureRegister(_uuid, address(this));
         assertEq(manager.isRegistered(_uuid), true);
-        assertEq(manager.addressUUIDs(msg.sender), _uuid);
-        assertEq(manager.uuidAddresses(_uuid), msg.sender);
+        assertEq(manager.addressUUIDs(address(this)), _uuid);
+        assertEq(manager.uuidAddresses(_uuid), address(this));
     }
 
     function testMint() public {
         fixtureRegisterMin();
-        uint256 id = fixtureMint(msg.sender, 1, 1);
-        uint256 balance = IERC1155(manager.keys(0)).balanceOf(msg.sender, id);
+        uint256 id = fixtureMint(address(this), 1, 1);
+        uint256 balance = IERC1155(manager.keys(0)).balanceOf(address(this), id);
         assertEq(balance, 1);
     }
 
@@ -48,12 +51,12 @@ contract FriendKeyManagerTest is Test {
         fixtureRegisterMin();
 
         uint256 amount = 5;
-        (uint256[] memory ids, uint256[] memory values) = fixtureBatchMint(msg.sender, amount, 1);
+        (uint256[] memory ids, uint256[] memory values) = fixtureBatchMint(address(this), amount, 1);
 
         uint256 sum = 0;
         for (uint256 i = 0; i < values.length; i++) {
-            uint balance = IERC1155(manager.keys(0)).balanceOf(msg.sender, ids[i]);
-            assertGt(balance, 0);
+            uint balance = IERC1155(manager.keys(0)).balanceOf(address(this), ids[i]);
+            assertEq(values[i], balance);
             sum += values[i];
         }
 
@@ -61,7 +64,54 @@ contract FriendKeyManagerTest is Test {
     }
 
     function testMintDigest() public {
+        fixtureRegisterMin();
+
+        uint256 amount = 10;
+        uint256 seed = 1;
+        uint256 level = 0;
+
+        (uint256[] memory ids, uint256[] memory values) = fixtureBatchMint(address(this), amount, seed);
+        (uint256[] memory ids2, uint256[] memory values2) = fixtureMintDigest(address(this), level, ids, values, seed);
+
+        uint256 sum = 0;
+        for (uint256 i = 0; i < values2.length; i++) {
+            uint balance = IERC1155(manager.keys(0)).balanceOf(address(this), ids2[i]);
+            sum += values2[i];
+            assertEq(values2[i], balance);
+        }
+        uint mintAmount = manager.DIGEST_RETURNS(level) * amount / manager.DIGEST_BATCH();
+        assertEq(sum, mintAmount);
+    }
+
+    function testMerge() public {
+        fixtureRegisterMin();
+
+        uint256 amount = 50;
+        uint256 seed = 1;
+        uint256 level = 0;
+
+        uint fee = manager.MERGE_FEES(level);
+        uint mergePieces = manager.MERGE_PIECES();
+
+        (uint256[] memory ids, uint256[] memory values) = fixtureBatchMint(address(this), amount, seed);
         
+        uint mergeId;
+        for (uint i = 0; i < ids.length; i++) {
+            if (values[i] > mergePieces) {
+                mergeId = ids[i];
+                break;
+            }
+        }
+
+        uint balBefore = IERC1155(manager.keys(level)).balanceOf(address(this), mergeId);
+        manager.merge{value: fee}(mergeId, level);
+
+        uint balAfter = IERC1155(manager.keys(level)).balanceOf(address(this), mergeId);
+        uint nextLevelBal = IERC1155(manager.keys(level+1)).balanceOf(address(this), mergeId);
+
+
+        assertEq(balAfter, balBefore - mergePieces);
+        assertEq(nextLevelBal, 1);
     }
 
     function fixtureRegister(string memory _uuid, address addr) public {
@@ -90,18 +140,18 @@ contract FriendKeyManagerTest is Test {
 
     function fixtureRegisterMin() public {
         uint256 minAmount = manager.MIN_USERS();
-        fixtureRegister("msg.sender", msg.sender);
+        fixtureRegister("address(this)", address(this));
         for (uint256 i = 0; i < minAmount; i++) {
             string memory _uuid = string(abi.encodePacked(i));
             vm.prank(address(bytes20(abi.encodePacked(i))));
-            fixtureRegister(_uuid, msg.sender);
+            fixtureRegister(_uuid, address(this));
             vm.stopPrank();
         }
     }
 
-    function fixtureMint(address to, uint256 amount, uint256 seed) public returns (uint) {
+    function fixtureMint(address sender, uint256 amount, uint256 seed) public returns (uint) {
         uint256 fee = manager.minFee();
-        manager.mint{value: fee}(to);
+        manager.mint{value: fee}(sender);
         uint256 requestId = vrfCoordinator.lastRequestId();
         uint256[] memory randomWords = new uint256[](1);
         randomWords[0] = seed;
@@ -110,21 +160,56 @@ contract FriendKeyManagerTest is Test {
         return id;
     }
 
-    function fixtureBatchMint(address to, uint256 amount, uint256 seed) public returns (uint256[] memory, uint256[] memory) {
+    function fixtureBatchMint(address sender, uint256 amount, uint256 seed) public returns (uint256[] memory, uint256[] memory) {
         uint256 fee = manager.minFee();
-        manager.batchMint{value: fee * amount}(msg.sender, amount);
+        manager.batchMint{value: fee * amount}(sender, amount);
         uint256 requestId = vrfCoordinator.lastRequestId();
+        return fixtureFulfillBatchMint(amount, seed, requestId);
+    }
+
+    function fixtureMintDigest(address sender, uint256 _level, uint256[] memory _ids, uint256[] memory _values, uint seed) public returns (uint256[] memory, uint256[] memory) {
+        manager.mintDigest(_level, _ids, _values, address(this));
+        uint256 requestId = vrfCoordinator.lastRequestId();
+        uint burnAmount;
+        for (uint256 i = 0; i < _values.length; i++) {
+            burnAmount += _values[i];
+        }
+        uint amount = manager.DIGEST_RETURNS(_level) * burnAmount / manager.DIGEST_BATCH();
+        return fixtureFulfillBatchMint(amount, seed, requestId);
+    }
+
+    function fixtureFulfillBatchMint(uint256 amount, uint256 seed, uint256 requestId) public returns (uint256[] memory, uint256[] memory) {
         uint256[] memory randomWords = new uint256[](1);
         randomWords[0] = seed;
 
-        uint256[] memory ids = new uint256[](amount);
-        uint256[] memory values = new uint256[](amount);
-
+        uint maxId;
         for (uint256 i = 0; i < amount; i++) {
-            ids[i] = getWeightedRandomIndex(seed, i);
-            values[i] = 1;
+            uint index = getWeightedRandomIndex(seed, i);
+            sums[index] += 1;
+            if (index > maxId) maxId = index;
         }
 
+        uint len;
+        for (uint256 i = 0; i <= maxId; i++) {
+            if(sums[i] > 0) {
+                len++;
+            }
+        }
+
+        uint256[] memory ids = new uint256[](len);
+        uint256[] memory values = new uint256[](len);
+        uint256 j = 0;
+        for (uint256 i = 0; i <= maxId; i++) {
+            if(sums[i] > 0) {
+                ids[j] = i;
+                values[j] = sums[i];
+                j++;
+            }
+        }
+
+        for (uint256 i = 0; i <= maxId; i++) {
+            sums[i] = 0;
+        }
         vrfCoordinator.fullfilRandomWord(address(manager), requestId, randomWords);
         return (ids, values);
     }
@@ -154,5 +239,27 @@ contract FriendKeyManagerTest is Test {
         // Should never reach here, but return 0 in case of unforeseen circumstances
         return 0;
     }
+
+    function onERC1155Received(address, address, uint256, uint256, bytes memory) public virtual returns (bytes4) {
+        return this.onERC1155Received.selector;
+    }
+
+    function onERC1155BatchReceived(
+        address operator,
+        address from,
+        uint256[] calldata ids,
+        uint256[] calldata values,
+        bytes calldata data
+    ) external returns (bytes4) {
+        return this.onERC1155BatchReceived.selector;
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view virtual override(IERC165) returns (bool) {
+        return (
+            interfaceId == type(IERC1155).interfaceId
+        );
+    }
+
+    receive() payable external {}
 
 }
