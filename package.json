@@ -1,6 +1,14 @@
 {
     "name": "azurance-contract",
     "devDependencies": {
-      "@chainlink/contracts-ccip": "^0.7.3"
+        "@chainlink/contracts-ccip": "^0.7.3",
+        "@typechain/ethers-v6": "^0.5.1",
+        "typechain": "^8.3.2"
+    },
+    "scripts": {
+        "deploy": "./commands/deploy-friend-key-manager.sh",
+        "build": "npm run clear && forge build && npm run typechain",
+        "clear": "rm -rf out && rm -rf typechain",
+        "typechain": "npx typechain --target ethers-v6 --out-dir typechain './out/**/*.json'"
     }
-  }
+}
