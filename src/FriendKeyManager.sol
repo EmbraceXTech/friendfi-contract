@@ -27,11 +27,12 @@ contract FriendKeyManager is FriendKeyManagerFunctions, FriendKeyManagerVRF {
     uint256 public maxFee = 1 ether;
 
     constructor(
-        uint64 subscriptionId_,
+        uint64 functionSubscriptionId_,
         address router_,
+        uint64 vrfSubscriptionId_,
         address coordinator_,
         string[] memory uris
-    ) FriendKeyManagerFunctions(subscriptionId_, router_) FriendKeyManagerVRF(subscriptionId_, coordinator_) {
+    ) FriendKeyManagerFunctions(functionSubscriptionId_, router_) FriendKeyManagerVRF(vrfSubscriptionId_, coordinator_) {
         require(uris.length == 3, "Size mismatch");
 
         for (uint i = 0; i < 3; i++) {

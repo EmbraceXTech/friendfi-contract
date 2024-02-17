@@ -20,7 +20,8 @@ contract FriendKeyManagerTest is Test, IERC1155Receiver {
     mapping(uint256 => uint256) sums;
 
     function setUp() public {
-        uint64 subscriptionId = 4070;
+        uint64 functionSubscriptionId = 4070;
+        uint64 vrfSubscriptionId = 4070;
         functionRouter = new TestFunctionsRouter();
         vrfCoordinator = new TestVRFCoordinator();
 
@@ -29,7 +30,7 @@ contract FriendKeyManagerTest is Test, IERC1155Receiver {
         uris[1] = "uri1";
         uris[2] = "uri2";
 
-        manager = new FriendKeyManager(subscriptionId, address(functionRouter), address(vrfCoordinator), uris);
+        manager = new FriendKeyManager(functionSubscriptionId, address(functionRouter), vrfSubscriptionId, address(vrfCoordinator), uris);
     }
 
     function testRegister() public {
