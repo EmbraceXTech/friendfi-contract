@@ -34,6 +34,7 @@ contract FriendKeyManagerFunctions is FunctionsClient, ConfirmedOwner {
 
     // Storage
     uint256 public minFee = 0.0005 ether;
+    uint256 public maxFee = 1 ether;
 
     string source =
         "const UUID = args[0];"

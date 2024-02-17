@@ -24,7 +24,6 @@ contract FriendKeyManager is FriendKeyManagerFunctions, FriendKeyManagerVRF {
     uint256 public lastMintTimestamp;
     uint256 public cooldownDuration = 1 days;
     uint256 public feeChangeRate = 2;
-    uint256 public maxFee = 1 ether;
 
     constructor(
         uint64 functionSubscriptionId_,
@@ -181,6 +180,10 @@ contract FriendKeyManager is FriendKeyManagerFunctions, FriendKeyManagerVRF {
 
     function isRegistered(string memory _uuid) public view returns(bool) {
         return _registered[_uuid];
+    }
+
+    function addressId(address _addr) public view returns(uint) {
+        return _addressIds[_addr];
     }
 
     function addressUUIDs(address _addr) public view returns(string memory) {
