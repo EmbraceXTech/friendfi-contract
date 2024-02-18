@@ -134,7 +134,7 @@ contract FriendKeyManager is FriendKeyManagerVRF {
     }
 
     function _getWeightedRandomIndex(uint256 _seed, uint256 _index) internal view returns (uint) {
-        uint256 randomNumber = uint256(keccak256(abi.encodePacked(_seed, _index, block.timestamp, block.prevrandao, msg.sender)));
+        uint256 randomNumber = uint256(keccak256(abi.encodePacked(_seed, _index, block.timestamp, msg.sender)));
 
         uint len = userManager.numUsers();
         uint startIndex = randomNumber % len;
