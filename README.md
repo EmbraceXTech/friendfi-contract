@@ -1,24 +1,33 @@
-## Foundry
+## FriendFi Contract
+**FriendFi is a social media with DeFi power. It enables people to reach out each other using financial mechanism relying on smart contract.**
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+<img src="./public/logo-friendfi.png" width="200" />
 
-Foundry consists of:
+There are 3 main contracts FriendFi:
+-   **FriendKeyManager**: The main entrypoing contract for unlocking friend connection.
+-   **UserManager**: The storage contract that holds list of users in the system.
+-   **FriendKey**: An ERC1155 token contract used to represent friend connections.
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
-
-## Documentation
-
-https://book.getfoundry.sh/
+The contracts integrated with Chainlink and Particle Auth.
+-   **UserManagerFunctions**: User manager relies on Chainlink Functions to validate user authentication from Particle Auth service.
+-   **FriendKeyManagerVRF**: Friend key manager relies on Chainlink VRF to feed random numbers for friend key mining process.
 
 ## Usage
+
+### Installation
+1. Install libs
+```shell
+$ forge install
+```
+2. Install npm
+```shell
+$ npm i
+```
 
 ### Build
 
 ```shell
-$ forge build
+$ npm run build
 ```
 
 ### Test
@@ -27,40 +36,11 @@ $ forge build
 $ forge test
 ```
 
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
 ### Deploy
 
 ```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+$ ./commands/deploy-friend-key-manager.sh
 ```
 
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+### Links
+- [Frontend Example](https://github.com/EmbraceXTech/friendfi-frontend)
